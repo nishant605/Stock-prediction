@@ -4,6 +4,5 @@ numpy
 scikit-learn
 matplotlib
 plotly
-tensorflow==2.13.0
 joblib
 xgboost
