@@ -5,7 +5,7 @@ import plotly.express as px
 from tensorflow.keras.models import load_model
 import numpy as np
 
-df = pd.read_pickle(r'C:\Users\ADMIN\Downloads\Stock Prediction\Copy of df_clean.pkl')
+df = pd.read_pickle('Copy of df_clean.pkl')
 
 excluded_name = {
     'HINDALC0',    # Old symbol for HINDALCO
