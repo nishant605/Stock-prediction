@@ -7,7 +7,25 @@ import numpy as np
 
 df = pd.read_pickle(r'C:\Users\ADMIN\Downloads\Stock Prediction\Copy of df_clean.pkl')
 
-list_of_stocks = df['Symbol'].unique().tolist()
+excluded_name = {
+    'HINDALC0',    # Old symbol for HINDALCO
+    'HEROHONDA',   # Old symbol for HEROMOTOCO
+    'HINDLEVER',   # Old symbol for HINDUNILVR
+    'INFOSYSTCH',  # Old symbol for INFY
+    'TISCO',       # Old symbol for TATASTEEL
+    'MUNDRAPORT',  # Old symbol for ADANIPORTS
+    'SESAGOA',     # Old symbol for VEDL
+    'ZEETELE',     # Old symbol for ZEEL
+    'UTIBANK',     # Old symbol for AXISBANK
+    'SSLT',        # Old symbol for VEDL (Sterlite)
+    'KOTAKMAH',    # Old symbol for KOTAKBANK
+    'TELCO',       # Old symbol for TATAMOTORS
+    'BHARTI',      # Old symbol for BHARTIARTL
+    'UNIPHOS',     # Old symbol (UPL predecessor)
+}
+all_stocks_raw = sorted(df['Symbol'].unique())
+list_of_stocks = [s for s in all_stocks_raw if s not in excluded_name]
+
 
 st.title('Stock Price Prediction')
 
