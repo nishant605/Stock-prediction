@@ -1,3 +1,5 @@
+from cProfile import label
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 import pickle
@@ -8,6 +10,8 @@ from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import GRU, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
+
+MODEL_DIR = Path("models")
 
 df = pd.read_pickle('Copy of df_clean.pkl')
 
@@ -121,7 +125,12 @@ if prediction_mode == "Upload CSV":
 
                 st.write("Preview of uploaded data:")
 
-                st.dataframe(uploaded_df.tail(10), use_container_width=True)
+                with st.expander("📄 View Uploaded Dataset"):
+
+                    st.dataframe(
+                        uploaded_df.tail(10),
+                        use_container_width=True
+                    )
 
                 if len(uploaded_df) < 200:
                     st.warning("The uploaded data has less than 200 rows. The model may not perform well with limited data.")
@@ -129,112 +138,136 @@ if prediction_mode == "Upload CSV":
                     st.success("uploaded data has sufficient rows for prediction.")
 
                     if st.button("train Model & predict"):
-                        with st.spinner("Training the model and making predictions..."):
-                            full_data = feature_creation_uploaded(uploaded_df)
-                            latest_data = full_data.dropna(subset=features).iloc[-1:].copy()  # Get the last row of the DataFrame
-                            model_data = full_data.dropna(subset=features+['target']).reset_index(drop=True)  # Drop rows with NaN values in features
+                        progress_bar = st.progress(0)
+                        status = st.empty()
 
-                            train_size = int(len(model_data) * 0.8)
-
-                            train_data = model_data.iloc[:train_size]
-                            test_data = model_data.iloc[train_size:]
-
-
-                            # Features
-                            X_train = train_data[features]
-                            X_test = test_data[features]
-
-
-                            # Target
-                            y_train = train_data['target'].values.reshape(-1, 1)
-                            y_test = test_data['target'].values.reshape(-1, 1)
-
-
-                            # Feature Scaling
-                            scaler_x = StandardScaler()
-
-                            X_train_scaled = scaler_x.fit_transform(X_train)
-                            X_test_scaled = scaler_x.transform(X_test)
-
-
-                            # Target Scaling
-                            scaler_y = StandardScaler()
-
-                            y_train_scaled = scaler_y.fit_transform(y_train)
-
-
-                            # Reshape for GRU
-                            X_train_scaled = X_train_scaled.reshape(X_train_scaled.shape[0], 1, X_train_scaled.shape[1])
-
-                            X_test_scaled = X_test_scaled.reshape(X_test_scaled.shape[0], 1, X_test_scaled.shape[1])
-
-                            model = Sequential([
-                                    GRU(64, return_sequences=True, input_shape=(1, len(features))),
-                                    Dropout(0.2),
-                                    GRU(32),
-                                    Dropout(0.2),
-                                    Dense(16, activation='relu'),
-                                    Dense(1)
-                                ])
-
-
-                                # Compile Model
-                            model.compile(optimizer='adam', loss='mse')
-
-
-                            # Early Stopping
-                            early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-
-
-                            # Train Model
-                            model.fit(
-                                X_train_scaled,
-                                y_train_scaled,
-                                validation_split=0.2,
-                                epochs=50,
-                                batch_size=32,
-                                callbacks=[early_stopping],
-                                verbose=0
-                            )
-
-
-                            # Predict Test Data
-                            y_pred_scaled = model.predict(X_test_scaled, verbose=0)
-
-                            y_pred = scaler_y.inverse_transform(y_pred_scaled)
-
-
-                            # Convert Return into Price
-                            current_close_test = test_data['current_close'].values
-
-                            actual_price = current_close_test * (1 + y_test.flatten())
-
-                            predicted_price_series = current_close_test * (1 + y_pred.flatten())
-
-
-                            # Predict Tomorrow
-                            latest_features = latest_data[features]
-
-                            latest_scaled = scaler_x.transform(latest_features)
-
-                            latest_scaled = latest_scaled.reshape(1, 1, len(features))
-
-                            tomorrow_scaled = model.predict(latest_scaled, verbose=0)
-
-                            tomorrow_return = scaler_y.inverse_transform(tomorrow_scaled)[0][0]
-
-
-                            # Latest Close Price
-                            last_price = latest_data['Close'].iloc[0]
-
-
-                            # Tomorrow Predicted Price
-                            predicted_price = last_price * (1 + tomorrow_return)
+                        status.text("📂 Reading uploaded data...")
+                        progress_bar.progress(10)
                         
-                        st.success("GRU model training completed!")
+                        status.text("⚙️ Creating technical indicators...")
+                        full_data = feature_creation_uploaded(uploaded_df)
+                        progress_bar.progress(25)
+
+                        latest_data = full_data.dropna(subset=features).iloc[-1:].copy()  # Get the last row of the DataFrame
+                        model_data = full_data.dropna(subset=features+['target']).reset_index(drop=True)  # Drop rows with NaN values in features
+                        progress_bar.progress(35)
+
+                        status.text("📊 Splitting training and testing data...")
+                        train_size = int(len(model_data) * 0.8)
+
+                        train_data = model_data.iloc[:train_size]
+                        test_data = model_data.iloc[train_size:]
+                        progress_bar.progress(45)
+
+                        # Features
+                        status.text("📏 Scaling features...")
+                        X_train = train_data[features]
+                        X_test = test_data[features]
+
+
+                        # Target
+                        y_train = train_data['target'].values.reshape(-1, 1)
+                        y_test = test_data['target'].values.reshape(-1, 1)
+
+
+                        # Feature Scaling
+                        scaler_x = StandardScaler()
+
+                        X_train_scaled = scaler_x.fit_transform(X_train)
+                        X_test_scaled = scaler_x.transform(X_test)
+
+
+                        # Target Scaling
+                        scaler_y = StandardScaler()
+
+                        y_train_scaled = scaler_y.fit_transform(y_train)
+                        progress_bar.progress(60)
+
+
+                        # Reshape for GRU
+                        X_train_scaled = X_train_scaled.reshape(X_train_scaled.shape[0], 1, X_train_scaled.shape[1])
+
+                        X_test_scaled = X_test_scaled.reshape(X_test_scaled.shape[0], 1, X_test_scaled.shape[1])
+
+                        status.text("🧠 Building GRU model...")
+
+                        model = Sequential([
+                                GRU(64, return_sequences=True, input_shape=(1, len(features))),
+                                Dropout(0.2),
+                                GRU(32),
+                                Dropout(0.2),
+                                Dense(16, activation='relu'),
+                                Dense(1)
+                            ])
+
+
+                            # Compile Model
+                        model.compile(optimizer='adam', loss='mse')
+                        progress_bar.progress(70)
+
+                        # Early Stopping
+                        early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+                        status.text("🚀 Training model...")
+                        # Train Model
+                        model.fit(
+                            X_train_scaled,
+                            y_train_scaled,
+                            validation_split=0.2,
+                            epochs=50,
+                            batch_size=32,
+                            callbacks=[early_stopping],
+                            verbose=0
+                        )
+                        progress_bar.progress(90)
+
+                        # Predict Test Data
+
+                        status.text("📈 Predicting tomorrow's stock price...")
+                        y_pred_scaled = model.predict(X_test_scaled, verbose=0)
+
+                        y_pred = scaler_y.inverse_transform(y_pred_scaled)
+
+
+                        # Convert Return into Price
+                        current_close_test = test_data['current_close'].values
+
+                        actual_price = current_close_test * (1 + y_test.flatten())
+
+                        predicted_price_series = current_close_test * (1 + y_pred.flatten())
+
+
+                        # Predict Tomorrow
+                        latest_features = latest_data[features]
+
+                        latest_scaled = scaler_x.transform(latest_features)
+
+                        latest_scaled = latest_scaled.reshape(1, 1, len(features))
+
+                        tomorrow_scaled = model.predict(latest_scaled, verbose=0)
+
+                        tomorrow_return = scaler_y.inverse_transform(tomorrow_scaled)[0][0]
+
+
+                        # Latest Close Price
+                        last_price = latest_data['Close'].iloc[0]
+
+
+                        # Tomorrow Predicted Price
+                        predicted_price = last_price * (1 + tomorrow_return)
+
+                        progress_bar.progress(100)
+                        status.success("✅ Training Completed Successfully!")
+                        
+                        st.success("""
+                            ✅ Model trained successfully!
+
+                            The uploaded dataset has been processed and tomorrow's
+                            stock price prediction is now available.
+                            """)
                         st.divider()
 
-                        st.subheader('Historical Close Price')
+                        st.markdown("## 📊 Historical Stock Price")
 
                         fig = px.line(
                             uploaded_df,
@@ -251,11 +284,19 @@ if prediction_mode == "Upload CSV":
 
                         st.subheader('Predicted Next-Day Close Price')
 
-                        col1, col2 = st.columns(2)
+                        col1, col2,col3= st.columns(3)
 
-                        col1.metric("Latest Close Price", f"₹{last_price:.2f}")
+                        col1.metric("💰 Latest Close", f"₹{last_price:.2f}")
 
-                        col2.metric("Predicted Close Price for Tomorrow", f"₹{predicted_price:.2f}")
+                        col2.metric(
+                            "📈 Tomorrow Prediction",
+                            f"₹{predicted_price:.2f}",
+                            f"{((predicted_price-last_price)/last_price)*100:.2f}%")
+
+                        col3.metric(
+                            "🎯 Predicted Return",
+                            f"{tomorrow_return*100:.2f}%"
+                        )
 
 
                         # Predicted Movement
@@ -274,13 +315,18 @@ if prediction_mode == "Upload CSV":
                         # Actual vs Predicted
                         st.divider()
 
-                        st.subheader('Actual vs Predicted Close Price')
+                        st.markdown("## 📉 Actual vs Predicted")
 
                         comparison_df = pd.DataFrame({
                             'Date': test_data['Date'].values,
                             'Actual Close Price': actual_price,
                             'Predicted Close Price': predicted_price_series
                         })
+
+                        result_df = comparison_df.copy()
+                        result_df["Tomorrow Predicted Price"] = np.nan
+                        result_df.loc[result_df.index[-1], "Tomorrow Predicted Price"] = predicted_price
+                        csv = result_df.to_csv(index=False).encode("utf-8")
 
                         fig2 = px.line(
                             comparison_df,
@@ -295,7 +341,7 @@ if prediction_mode == "Upload CSV":
                         # Model Performance
                         st.divider()
 
-                        st.subheader('Model Performance Metrics')
+                        st.markdown("## 📋 Model Performance")
 
                         mae = np.mean(np.abs(predicted_price_series - actual_price))
 
@@ -306,6 +352,26 @@ if prediction_mode == "Upload CSV":
                             np.sign(actual_price - current_close_test)
                         ) * 100
 
+                        summary_df = pd.DataFrame({
+                        "Metric":[
+                            "Latest Close Price",
+                            "Tomorrow Prediction",
+                            "Predicted Return (%)",
+                            "MAE",
+                            "MAPE",
+                            "Direction Accuracy (%)"
+                        ],
+                        "Value":[
+                            last_price,
+                            predicted_price,
+                            tomorrow_return*100,
+                            mae,
+                            mape,
+                            direction_accuracy
+                        ]
+                    })
+                        
+                        summary_csv = summary_df.to_csv(index=False).encode("utf-8")  
 
                         col1, col2, col3 = st.columns(3)
 
@@ -315,7 +381,11 @@ if prediction_mode == "Upload CSV":
 
                         col3.metric("Direction Accuracy", f"{direction_accuracy:.2f}%")
                         
+                        st.divider()
+                        st.markdown("## 📥 Download Results")
+                        st.download_button(label="📥 Download Prediction Report", data=csv, file_name="prediction_report.csv", mime="text/csv")
 
+                        st.download_button("📄 Download Summary",summary_csv,"prediction_summary.csv","text/csv")
         
 else:
 
@@ -339,7 +409,7 @@ else:
 
         st.divider()
 
-        st.subheader('Historical Close Price')
+        st.markdown("## 📊 Historical Stock Price")
 
         fig = px.line(data, x='Date', y='Close', title=f'{selected_stock} Close Price Over Time')
         st.plotly_chart(fig, use_container_width=True)
@@ -348,10 +418,10 @@ else:
 
         st.subheader('Predicted Next-Day Close Price')
 
-        model = load_model(f'models/gru_model_{selected_stock}.keras')
+        model = load_model(MODEL_DIR / f"gru_model_{selected_stock}.keras")
 
-        scaler_x = pickle.load(open(f'models/scaler_X_{selected_stock}.pkl', 'rb'))
-        scaler_y = pickle.load(open(f'models/scaler_y_{selected_stock}.pkl', 'rb'))
+        scaler_x = pickle.load(open(MODEL_DIR / f"scaler_X_{selected_stock}.pkl", "rb"))
+        scaler_y = pickle.load(open(MODEL_DIR / f"scaler_y_{selected_stock}.pkl", "rb"))
 
         X_scaled = scaler_x.transform(data[features])
         X_scaled = X_scaled.reshape(X_scaled.shape[0], 1, X_scaled.shape[1]) #GRU expect this(samples, timesteps, features)
@@ -369,7 +439,7 @@ else:
 
         st.divider()
 
-        st.subheader('Actual vs Predicted Close Price')
+        st.markdown("## 📉 Actual vs Predicted")
 
         train_size = int(len(data) * 0.8)
         X_test = X_scaled[train_size:]
@@ -395,7 +465,7 @@ else:
 
         st.divider()
 
-        st.subheader('Model Performance Metrics')
+        st.markdown("## 📋 Model Performance")
 
         mae = np.mean(np.abs(predicted_price_series - actual_price))
         mape = np.mean(np.abs((predicted_price_series - actual_price) / actual_price)) * 100 #(predicted - actual) / actual
