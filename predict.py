@@ -62,22 +62,32 @@ def feature_creation(df, stock_name):
 
     return data
 
-st.subheader('Select a stock to predict its next-day price')
+st.subheader('Choose Prediction Method')
 
-selected_stock = st.selectbox('Select Stock', list_of_stocks)
+prediction_mode = st.radio("Select how you want to provide stock data:", ['Select Stock', 'Upload CSV'],horizontal=True)
 
-if "predict_clicked" not in st.session_state:
-    st.session_state.predict_clicked = False
+if prediction_mode == "Upload CSV":
+    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+    if uploaded_file is not None:
+        uploaded_df = pd.read_csv(uploaded_file)
+        st.success("File uploaded successfully!")
+        st.write("Preview of uploaded data:")
+        st.dataframe(uploaded_df.head())
+else:
+    selected_stock = st.selectbox('Select Stock', list_of_stocks)
 
-if st.button('Predict'):
-    st.session_state.predict_clicked = True
+    if "predict_clicked" not in st.session_state:
+        st.session_state.predict_clicked = False
 
-if st.session_state.predict_clicked:
-    st.divider()
+    if st.button('Predict'):
+        st.session_state.predict_clicked = True
 
-    data = df[df['Symbol'] == selected_stock]
-    st.write(f'last 10 days data of {selected_stock}')
-    st.dataframe(data.tail(10))
+    if st.session_state.predict_clicked:
+        st.divider()
+
+        data = df[df['Symbol'] == selected_stock]
+        st.write(f'last 10 days data of {selected_stock}')
+        st.dataframe(data.tail(10))
 
     data = feature_creation(data, selected_stock)
     X = data.drop(['target','Symbol','Date'], axis=1)
