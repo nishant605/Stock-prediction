@@ -464,7 +464,6 @@ else:
         st.plotly_chart(fig2, use_container_width=True)
 
         st.divider()
-
         st.markdown("## 📋 Model Performance")
 
         mae = np.mean(np.abs(predicted_price_series - actual_price))
@@ -512,7 +511,7 @@ else:
                 recent_data['MACD'] = ema12 - ema26
                 recent_data['High_Low_Ratio'] = recent_data['High'] / (recent_data['Low'] + 1e-10)
                 recent_data['Close_Open_Ratio'] = recent_data['Close'] / (recent_data['Open'] + 1e-10)
-                recent_data = recent_data.fillna(method='ffill')
+                recent_data = recent_data.ffill()
 
                 last_price = next_price
 
@@ -526,7 +525,6 @@ else:
             "Predicted Price": feature_price})
 
             st.dataframe(future_df)
-
             fig_future = px.line(
             future_df,
             x="Date",
